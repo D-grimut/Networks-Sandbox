@@ -21,9 +21,8 @@ class Helper():
         return encoded
     
 
-    def prepare_packet(encrypted_packet, dest_port, source_port):
+    def prepare_packet(encrypted_packet, dest_port, source_port, send_seq):
         recv_initial_seq = int(encrypted_packet[Helper.TCP_DEST_PORT: Helper.SEQ_NUM].decode())
-        send_initial_seq = 5
         ack = recv_initial_seq + 1
 
         print(f'[RECIEVED from {dest_port}] initial seuqence num {recv_initial_seq}')
@@ -31,7 +30,7 @@ class Helper():
         encoded_source_port = Helper.encode_data(source_port, 16)
         encoded_dest_port = Helper.encode_data(dest_port, 16)
 
-        encoded_seq_num = Helper.encode_data(send_initial_seq, 32)
+        encoded_seq_num = Helper.encode_data(send_seq, 32)
         encoded_ack_num = Helper.encode_data(ack, 32)
 
         encoded_message = Helper.encode_data("Why are you looking at the data so early in the handshake?", Helper.MAX_PACKET_SIZE - 96)

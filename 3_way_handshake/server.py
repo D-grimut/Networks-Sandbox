@@ -12,6 +12,7 @@ class Server():
         self.cleints = {}
         self.sock = sk.socket(sk.AF_INET, sk.SOCK_DGRAM) if is_udp else sk.socket(sk.AF_INET, sk.SOCK_STREAM)
         self.sock.bind(Server.ADDR)
+        self.initial_seq = 5
 
     def handle_client(conn: sk.socket, addr: int):
 
