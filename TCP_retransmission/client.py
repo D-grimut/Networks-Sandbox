@@ -25,7 +25,9 @@ class Client:
         syn_packet = Packet(PacketType.SYN, self.last_ack_recieved + 1, "")
         self.sock.send(syn_packet.to_bytes())
 
-        self.thread = threading.Thread(target=self.send_packet)
+        self.last_seq_sent = self.last_ack_recieved
+
+        self.thread = threading.Thread(target=self.recv_ack)
         self.thread.start()
  
     def encode_data(data: str) -> list:
@@ -42,6 +44,7 @@ class Client:
         slot = re_transmit_seq_num % self.buffer_slots
 
         if self.buffer[slot] and self.buffer[slot]['seq num'] == re_transmit_seq_num:
+            print(f"[TIMEOUT] Re-transmitting last packet sent seq num: {re_transmit_seq_num}")
             packet = self.buffer[slot]['packet']
             self.sock.send(packet.to_bytes())
 
@@ -65,7 +68,7 @@ class Client:
                 #start timout timer
                 if self.timer is not None:
                     self.timer.cancel()
-                self.timer = threading.Timer(interval=5.0, function=self.timeout, args=(packet.seq_num))
+                self.timer = threading.Timer(interval=5.0, function=self.timeout)
                 self.timer.start()
         
     # we are recieving CUMULATIVE ACKs
@@ -77,20 +80,25 @@ class Client:
                 continue
 
             recv_packet = Packet.from_bytes(raw_data)
+
             if recv_packet.type != PacketType.ACK:
                 continue
 
             ack_num = recv_packet.seq_num
-
             self.last_ack_recieved = ack_num
 
-            if(self.last_seq_sent <=  ack_num):
-                for seq_num in range(self.last_seq_sent, ack_num + 1):
-                    slot = seq_num % self.buffer_slots
-                    self.buffer[slot] = None
-                    self.semaphore.release()
+            print(f"[RECIEVED] ACK for packet {ack_num}")
+
+            start, end  = self.last_seq_sent - self.buffer_slots + 1, ack_num + 1
+
+            for seq_num in range(start, end):
+                slot = seq_num % self.buffer_slots
+                self.buffer[slot] = None
+                self.semaphore.release()
                 
             if self.last_seq_sent == ack_num:
+                print(f"[RECIEVED] Last ACK - num: {ack_num} - stopping timer")
                 self.timer.cancel()
 
 client = Client()
+client.send_packet()

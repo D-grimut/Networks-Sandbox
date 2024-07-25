@@ -34,30 +34,42 @@ class Server():
             seq_num = packet.seq_num
 
             if packet.type == PacketType.SYN:
-                print(f"[RECIEVED] Syn recived, expecting seq num: {seq_num} \n")
+                print(f"[RECIEVED] Syn recived, expecting seq num: {seq_num}")
                 expected_seq_num = seq_num
                 continue
             
             elif packet.type != PacketType.DATA: # this can be extended later to accomodate for two way data transfers
                 continue
-            
+
+            slot = seq_num % buffer_slots
+            buffer[slot] = {"packet" : packet, "seq num" : seq_num}
+
             if seq_num != expected_seq_num:
-                slot = (expected_seq_num - 1) % buffer_slots
-                buffer[slot] = {"packet" : packet, "seq num" : seq_num}
-                ack_pack = Packet(PacketType.ACK, expected_seq_num - 1, "")
+                print(f"[SENDING] Out of Order (recieved: {seq_num}) - sending last well recieved ACK {expected_seq_num - 1}")
+                ack_pack = Packet(PacketType.ACK, expected_seq_num - 1, "ACK")
                 conn.send(ack_pack.to_bytes())
 
             else:
-                i = 0
-                print("[RECIEVED] Printing all data freed by this packet\n")
+                i = slot
 
-                while i < buffer_slots and buffer[i] != None:
-                    expected_seq_num = buffer[i]['seq num'] + 1
-                    print(buffer[i]['packet'].data)
+                print("[RECIEVED] Printing all data freed by this packet")
+
+                while buffer[i] != None:
+                    
+                    processing_seq = buffer[i]['seq num']
+                    expected_seq_num = processing_seq + 1
+                    print(buffer[i]['packet'].data.decode())
                     buffer[i] = None
                     i += 1
+
+                    if i == len(buffer):
+                        i = i % len(buffer)
+                    
+                    print(f"[SENDING] ACK for seq num {seq_num}")
+                    ack_pack = Packet(PacketType.ACK, processing_seq, "ACK")
+                    conn.send(ack_pack.to_bytes())
                 
-                print("[RECIEVED] Done\n")
+                print("[RECIEVED] Done ----")
 
     def start_server(self):
         
