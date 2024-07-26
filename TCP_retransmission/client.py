@@ -1,8 +1,12 @@
 import socket as sk
 import threading
+import numpy as np
 from packet import Packet, PacketType
+import time
 
 class Client:
+
+    DROPOUT_RATE = 0.3
 
     def __init__(self,server_ip = "192.168.2.74", server_port = 5050):
 
@@ -30,6 +34,7 @@ class Client:
         self.thread = threading.Thread(target=self.recv_ack)
         self.thread.start()
  
+
     def encode_data(data: str) -> list:
         
         core_data = []
@@ -38,6 +43,7 @@ class Client:
 
         return core_data
 
+
     def timeout(self):
 
         re_transmit_seq_num = self.last_ack_recieved + 1
@@ -45,35 +51,47 @@ class Client:
 
         if self.buffer[slot] and self.buffer[slot]['seq num'] == re_transmit_seq_num:
             print(f"[TIMEOUT] Re-transmitting last packet sent seq num: {re_transmit_seq_num}")
-            packet = self.buffer[slot]['packet']
-            self.sock.send(packet.to_bytes())
+            self.send_packet(packet=self.buffer[slot]['packet'])
+    
 
-    def send_packet(self):
+    def get_message(self):
 
-        while True:
-            message = input()
-            core_data = Client.encode_data(message)
+        message = None
 
-            for data in core_data:
-                self.semaphore.acquire()
+        print("Type message to send to da serwer:")
+        message = input()
 
-                # create packet
-                packet = Packet(PacketType.DATA, self.last_seq_sent + 1, data)
-                self.last_seq_sent = self.last_seq_sent + 1
+        core_data = Client.encode_data(message)
 
-                slot = packet.seq_num % self.buffer_slots
-                self.buffer[slot] = {"packet" : packet, "seq num" : packet.seq_num}
-                self.sock.send(packet.to_bytes())
+        for data in core_data:
+            self.send_packet(data)
 
-                #start timout timer
-                if self.timer is not None:
-                    self.timer.cancel()
-                self.timer = threading.Timer(interval=5.0, function=self.timeout)
-                self.timer.start()
+
+    def send_packet(self, data=None, packet=None):
+
+        # if packet passed, use it, otherwise create it
+        if not packet:
+            self.semaphore.acquire()
+            packet = Packet(PacketType.DATA, self.last_seq_sent + 1, data)
+            self.last_seq_sent = self.last_seq_sent + 1
+
+        slot = packet.seq_num % self.buffer_slots
+        self.buffer[slot] = {"packet" : packet, "seq num" : packet.seq_num}
+        print(f"[SENDING] Sending packet {packet.seq_num}")
+        self.sock.send(packet.to_bytes())
+
+        #start timout timer
+        if self.timer is not None:
+            self.timer.cancel()
+        self.timer = threading.Timer(interval=3.0, function=self.timeout)
+        self.timer.start()
+
+        time.sleep(0.5)
         
     # we are recieving CUMULATIVE ACKs
     def recv_ack(self):
         while True:
+        
             raw_data = self.sock.recv(4096)
 
             if raw_data is None:
@@ -85,10 +103,15 @@ class Client:
                 continue
 
             ack_num = recv_packet.seq_num
-            self.last_ack_recieved = ack_num
+
+            dropout = np.random.uniform(0, 1)
+            if dropout <= Client.DROPOUT_RATE:
+                print(f"[DROPPING] Dropped ACK {ack_num}")
+                continue
 
             print(f"[RECIEVED] ACK for packet {ack_num}")
 
+            self.last_ack_recieved = ack_num
             start, end  = self.last_seq_sent - self.buffer_slots + 1, ack_num + 1
 
             for seq_num in range(start, end):
@@ -101,4 +124,4 @@ class Client:
                 self.timer.cancel()
 
 client = Client()
-client.send_packet()
+client.get_message()
